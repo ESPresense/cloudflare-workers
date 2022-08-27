@@ -1,0 +1,26 @@
+{
+  "name": "hono-minimal",
+  "private": true,
+  "version": "0.0.1",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "jest --verbose",
+    "dev": "wrangler dev src/index.ts",
+    "deploy": "wrangler publish src/index.ts"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@octokit/core": "^4.0.5",
+    "@zip.js/zip.js": "^2.6.19",
+    "hono": "^2.0.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^3.14.1",
+    "@types/jest": "^28.1.6",
+    "esbuild": "^0.15.5",
+    "esbuild-jest": "^0.5.0",
+    "jest": "^28.1.3",
+    "jest-environment-wrangler": "^0.0.31",
+    "wrangler": "^2.0.27"
+  }
+}
