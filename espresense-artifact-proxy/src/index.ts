@@ -4,7 +4,7 @@ import { cache } from 'hono/cache'
 import { cors } from 'hono/cors'
 
 import { Octokit } from "@octokit/core"
-import * as zip from "@zip.js/zip.js"
+import * as fflate from "fflate";
 
 function esp32(path) {
   return {
@@ -66,18 +66,16 @@ const artifacts = new Hono()
 artifacts.use('*', prettyJSON())
 
 artifacts.get('/download/:artifact_id/:bin', async (c) => {
-  const API_URL = "https://github.com/ESPresense/ESPresense"
-  const bin = c.req.param('bin')
   const artifact_id = parseInt(c.req.param('artifact_id'))
   const artifact = await fetch(`https://nightly.link/ESPresense/ESPresense/actions/artifacts/${artifact_id}.zip`);
-
-  zip.configure({ chunkSize: 128, useWebWorkers: true });
-	const zipReader = new zip.ZipReader({ readable: artifact.body });
-	const entries = await zipReader.getEntries();
-	const data = await entries[0].getData(new zip.BlobWriter());
-  await zipReader.close();
-
-  return c.body(data, artifact.status)
+  const ab = await artifact.arrayBuffer();
+  const arr = new Uint8Array(ab)
+  const files = fflate.unzipSync(arr);
+  for (const key in files) {
+    if (Object.prototype.hasOwnProperty.call(files, key)) {
+      return c.newResponse(files[key], 200, { 'Content-Type': 'application/octet-stream' });
+    }
+  }
 });
 
 artifacts.get('/:run_id{[0-9]+.json}', async (c) => {

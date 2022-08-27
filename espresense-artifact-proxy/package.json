@@ -11,7 +11,7 @@
   "license": "MIT",
   "dependencies": {
     "@octokit/core": "^4.0.5",
-    "@zip.js/zip.js": "^2.6.19",
+    "fflate": "^0.7.3",
     "hono": "^2.0.7"
   },
   "devDependencies": {
