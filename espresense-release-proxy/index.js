@@ -99,7 +99,7 @@ async function manifestResponse(request) {
         headers: {
             "Content-Type": "text/json;charset=UTF-8",
             "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "public, max-age=1500"
+            "Cache-Control": "public, max-age=900"
         }
     });
 }
