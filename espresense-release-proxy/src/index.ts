@@ -1,0 +1,172 @@
+import { Hono } from 'hono'
+import type { Context } from 'hono'
+import { prettyJSON } from 'hono/pretty-json'
+import { cache } from 'hono/cache'
+import { cors } from 'hono/cors'
+
+function esp32(path: string) {
+  return {
+    "chipFamily": "ESP32",
+    "improv": false,
+    "parts": [{
+      "path": "/static/bootloader_esp32.bin",
+      "offset": 4096
+    },
+    {
+      "path": "/static/partitions.bin",
+      "offset": 32768
+    },
+    {
+      "path": "/static/boot_app0.bin",
+      "offset": 57344
+    },
+    {
+      "path": path,
+      "offset": 65536
+    }]
+  };
+}
+
+function esp32c3(path: string) {
+  return {
+    "chipFamily": "ESP32-C3",
+    "improv": false,
+    "parts": [{
+      "path": "/static/bootloader_esp32c3.bin",
+      "offset": 0x0000
+    },
+    {
+      "path": "/static/partitions_esp32c3.bin",
+      "offset": 0x8000
+    },
+    {
+      "path": "/static/boot_app0.bin",
+      "offset": 0xe000
+    },
+    {
+      "path": path,
+      "offset": 0x10000
+    }]
+  };
+}
+
+interface Asset {
+  name: string;
+  browser_download_url: string;
+}
+
+interface Release {
+  name: string;
+  assets: Asset[];
+}
+
+function findAsset(rel: Release, name: string): Asset | null {
+  const f = rel.assets.filter(asset => asset.name === name)
+  return f.length ? f[0] : null
+}
+
+const app = new Hono()
+app.use("*", cors())
+app.get('/', (c: Context) => c.text('OK'))
+
+const releases = new Hono()
+releases.use('*', prettyJSON())
+
+// Specific release manifests are immutable, cache for 24 hours
+releases.get('/:tag{[^/]+\\.json}',
+  cache({ cacheName: 'releases', cacheControl: 'public, max-age=86400' }),
+  async (c: Context) => {
+    const fname = c.req.param('tag')
+    const tag = fname.substring(0, fname.lastIndexOf('.'))
+    const flavor = c.req.query('flavor')
+
+    const response = await fetch(`https://api.github.com/repos/ESPresense/ESPresense/releases/tags/${tag}`, {
+      headers: { "User-Agent": "espresense-release-proxy" },
+      cf: {
+        cacheTtlByStatus: { '200-299': 300, '404': 1, '500-599': 0 }
+      }
+    } as any)
+
+    if (!response.ok) {
+      return c.json({ error: "Release not found" }, response.status as any)
+    }
+
+    const rel: Release = await response.json()
+
+    const manifest = {
+      "name": "ESPresense " + rel.name + (flavor && flavor !== "" ? ` (${flavor})` : ""),
+      "new_install_prompt_erase": true,
+      "builds": [] as any[]
+    }
+
+    const a32 = findAsset(rel, `esp32-${flavor}.bin`) || findAsset(rel, `${flavor}.bin`) || findAsset(rel, `esp32.bin`)
+    if (a32) manifest.builds.push(esp32(`download/${tag}/${a32.name}`))
+
+    const c3 = findAsset(rel, `esp32c3-${flavor}.bin`) || findAsset(rel, `esp32c3.bin`)
+    if (c3) manifest.builds.push(esp32c3(`download/${tag}/${c3.name}`))
+
+    return c.json(manifest)
+  }
+)
+
+// Specific release downloads are immutable, cache for 24 hours
+releases.get('/download/:tag/:filename',
+  cache({ cacheName: 'releases', cacheControl: 'public, max-age=86400' }),
+  async (c: Context) => {
+    const tag = c.req.param('tag')
+    const filename = c.req.param('filename')
+
+    const githubUrl = `https://github.com/ESPresense/ESPresense/releases/download/${tag}/${filename}`
+    const response = await fetch(githubUrl, {
+      cf: {
+        cacheTtlByStatus: { '200-299': 300, '404': 1, '500-599': 0 }
+      }
+    } as any)
+
+    return new Response(response.body, {
+      status: response.status,
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=86400'
+      }
+    })
+  }
+)
+
+// Latest prerelease changes, cache for 1 hour
+releases.get('/latest-any/download/:filename',
+  cache({ cacheName: 'releases', cacheControl: 'public, max-age=3600' }),
+  async (c: Context) => {
+    const filename = c.req.param('filename')
+
+    const response = await fetch("https://api.github.com/repos/ESPresense/ESPresense/releases", {
+      headers: { "User-Agent": "espresense-release-proxy" },
+      cf: {
+        cacheTtlByStatus: { '200-299': 300, '404': 1, '500-599': 0 }
+      }
+    } as any)
+
+    if (!response.ok) {
+      return c.json({ error: "No releases found" }, response.status as any)
+    }
+
+    const releases: Release[] = await response.json()
+    const rel = releases.find(r => r.assets.length)
+
+    if (!rel) {
+      return c.json({ error: "No release found" }, 404)
+    }
+
+    const asset = rel.assets.find(a => a.name === filename)
+    if (!asset) {
+      return c.json({ error: "No asset found" }, 404)
+    }
+
+    return c.redirect(asset.browser_download_url)
+  }
+)
+
+app.route('/releases', releases)
+
+export default app

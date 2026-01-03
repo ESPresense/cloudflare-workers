@@ -1,16 +1,28 @@
 {
-  "private": true,
   "name": "espresense-release-proxy",
+  "private": true,
   "version": "1.0.0",
-  "description": "A template for kick starting a Cloudflare Workers project",
-  "main": "index.js",
+  "description": "ESPresense release proxy for Cloudflare Workers",
+  "main": "src/index.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "format": "prettier --write '**/*.{js,css,json,md}'"
+    "test": "jest --verbose",
+    "dev": "wrangler dev src/index.ts",
+    "deploy": "wrangler publish src/index.ts",
+    "format": "prettier --write '**/*.{js,ts,css,json,md}'"
   },
   "author": "Darrell Turner <DT@Terastar.biz>",
   "license": "MIT",
+  "dependencies": {
+    "hono": "^2.0.7"
+  },
   "devDependencies": {
-    "prettier": "^1.18.2"
+    "@cloudflare/workers-types": "^3.14.1",
+    "@types/jest": "^28.1.6",
+    "esbuild": "^0.15.5",
+    "esbuild-jest": "^0.5.0",
+    "jest": "^28.1.3",
+    "jest-environment-wrangler": "^0.0.31",
+    "prettier": "^1.18.2",
+    "wrangler": "^2.0.27"
   }
 }
