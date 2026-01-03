@@ -61,8 +61,7 @@ interface Release {
 }
 
 function findAsset(rel: Release, name: string): Asset | null {
-  const f = rel.assets.filter(asset => asset.name === name)
-  return f.length ? f[0] : null
+  return rel.assets.find(asset => asset.name === name) ?? null
 }
 
 const app = new Hono()
@@ -127,8 +126,7 @@ releases.get('/download/:tag/:filename',
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream',
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=86400'
+        'Access-Control-Allow-Origin': '*'
       }
     })
   }

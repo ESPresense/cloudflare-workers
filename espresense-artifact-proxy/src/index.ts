@@ -59,8 +59,7 @@ interface Artifact {
 }
 
 function findAsset(rel: Artifact[], name: string): Artifact | null {
-  const f = rel.filter(artifact => artifact.name === name)
-  return f.length ? f[0] : null
+  return rel.find(artifact => artifact.name === name) ?? null
 }
 
 const app = new Hono()
@@ -144,26 +143,26 @@ artifacts.get('/:run_id_2{[0-9]+.json}',
     const run_id = parseInt(c.req.param('run_id_2'));
     console.log({ flavor, run_id })
 
-    var resp = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts', {
+    const resp = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts', {
       owner: 'ESPresense',
       repo: 'ESPresense',
       run_id: run_id
     })
 
-    let artifacts = resp.data.artifacts;
-    if (artifacts.length === 0) return c.notFound()
-    let workflow_run = artifacts[0].workflow_run;
+    const runArtifacts = resp.data.artifacts;
+    if (runArtifacts.length === 0) return c.notFound()
+    const workflow_run = runArtifacts[0].workflow_run;
     if (!workflow_run) return c.json({ error: "No workflow run found" }, 404)
 
-    let manifest: any = {
-      "name": "ESPresense " + workflow_run.head_branch + " branch" + (flavor && flavor != "" ? ` (${flavor})` : ""),
+    const manifest: any = {
+      "name": "ESPresense " + workflow_run.head_branch + " branch" + (flavor && flavor !== "" ? ` (${flavor})` : ""),
       "new_install_prompt_erase": true,
       "builds": []
     };
-    var a32 = findAsset(artifacts, `esp32-${flavor}.bin`) || findAsset(artifacts, `${flavor}.bin`) || findAsset(artifacts, `esp32.bin`)
+    const a32 = findAsset(runArtifacts, `esp32-${flavor}.bin`) || findAsset(runArtifacts, `${flavor}.bin`) || findAsset(runArtifacts, `esp32.bin`)
     if (a32) manifest.builds.push(esp32(`download/${a32.id}/${a32.name}`))
 
-    var c3 = findAsset(artifacts, `esp32c3-${flavor}.bin`) || findAsset(artifacts, `esp32c3.bin`)
+    const c3 = findAsset(runArtifacts, `esp32c3-${flavor}.bin`) || findAsset(runArtifacts, `esp32c3.bin`)
     if (c3) manifest.builds.push(esp32c3(`download/${c3.id}/${c3.name}`))
     return c.json(manifest)
   }
