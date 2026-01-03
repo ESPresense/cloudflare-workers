@@ -12,6 +12,22 @@ const corsHeaders = {
 const PROXY_ENDPOINT = "/releases/"
 const DOWNLOAD_ENDPOINT = "/releases/latest-any/download/"
 
+async function cacheFirst(event, cacheKey, ttlSeconds, responder) {
+    const cache = caches.default
+    const cached = await cache.match(cacheKey)
+    if (cached) return cached
+
+    const response = await responder()
+    if (response.status < 400) {
+        const cacheable = new Response(response.body, response)
+        cacheable.headers.set("Cache-Control", `public, max-age=${ttlSeconds}`)
+        event.waitUntil(cache.put(cacheKey, cacheable.clone()))
+        return cacheable
+    }
+
+    return response
+}
+
 function esp32(path) {
     return {
         "chipFamily": "ESP32",
@@ -64,17 +80,21 @@ function findAsset(rel, name)
     return f.length ? f[0] : null
 }
 
-async function manifestResponse(request) {
+async function manifestResponse(request, event) {
     const url = new URL(request.url)
     const { pathname, searchParams } = url
     const fname = pathname.substring(pathname.lastIndexOf('/') + 1);
     const tag = fname.substring(0, fname.lastIndexOf('.'));
 
-    request = new Request(`https://api.github.com/repos/ESPresense/ESPresense/releases/tags/${tag}`)
-    request.headers.set("User-Agent", "espresense-release-proxy")
-    request.followAllRedirects = true
-    console.log(`Request: ${request.url}`)
-    let response = await fetch(request, {
+    const cacheKey = new Request(request.url)
+    const cached = await caches.default.match(cacheKey)
+    if (cached) return cached
+
+    const apiRequest = new Request(`https://api.github.com/repos/ESPresense/ESPresense/releases/tags/${tag}`)
+    apiRequest.headers.set("User-Agent", "espresense-release-proxy")
+    apiRequest.followAllRedirects = true
+    console.log(`Request: ${apiRequest.url}`)
+    let response = await fetch(apiRequest, {
         cf: {
             cacheTtlByStatus: { '200-299': 300, '404': 1, '500-599': 0 }
         }
@@ -95,38 +115,46 @@ async function manifestResponse(request) {
 
     console.log(JSON.stringify(manifest))
 
-    return new Response(JSON.stringify(manifest), {
-        headers: {
-            "Content-Type": "text/json;charset=UTF-8",
-            "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "public, max-age=900"
-        }
-    });
+    const responseBody = JSON.stringify(manifest)
+    const responseHeaders = {
+        "Content-Type": "text/json;charset=UTF-8",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "public, max-age=900"
+    }
+
+    const manifestResponse = new Response(responseBody, { headers: responseHeaders })
+    event.waitUntil(caches.default.put(cacheKey, manifestResponse.clone()))
+
+    return manifestResponse
 }
 
-async function fetchFromGithub(request) {
+async function fetchFromGithub(request, event) {
     const API_URL = "https://github.com/ESPresense/ESPresense"
     const path = new URL(request.url).pathname
     const url = API_URL + path
-    request = new Request(url)
-    request.followAllRedirects = true
-    console.log(`Request: ${request.url}`)
+    const cacheKey = new Request(request.url)
 
-    request.headers.set("Origin", new URL(request.url).pathname)
-    let response = await fetch(request, {
-        cf: {
-            cacheTtlByStatus: { '200-299': 300, '404': 1, '500-599': 0 }
-        }
-    });
+    return cacheFirst(event, cacheKey, 1500, async () => {
+        const githubRequest = new Request(url)
+        githubRequest.followAllRedirects = true
+        console.log(`Request: ${githubRequest.url}`)
 
-    // Recreate the response so we can modify the headers
-    response = new Response(response.body, response)
+        githubRequest.headers.set("Origin", new URL(request.url).pathname)
+        let response = await fetch(githubRequest, {
+            cf: {
+                cacheTtlByStatus: { '200-299': 300, '404': 1, '500-599': 0 }
+            }
+        });
 
-    // Set CORS headers
-    response.headers.set("Access-Control-Allow-Origin", "*")
-    response.headers.set("Cache-Control", "public, max-age=1500")
+        // Recreate the response so we can modify the headers
+        response = new Response(response.body, response)
 
-    return response
+        // Set CORS headers
+        response.headers.set("Access-Control-Allow-Origin", "*")
+        response.headers.set("Cache-Control", "public, max-age=1500")
+
+        return response
+    })
 }
 
 function handleOptions(request) {
@@ -162,11 +190,15 @@ function handleOptions(request) {
     }
 }
 
-async function redirectToPrerelease(request) {
+async function redirectToPrerelease(request, event) {
     const url = new URL(request.url)
     const { pathname, searchParams } = url
     const fname = pathname.substring(pathname.lastIndexOf('/') + 1);
     console.log(fname);
+
+    const cacheKey = new Request(request.url)
+    const cached = await caches.default.match(cacheKey)
+    if (cached) return cached
 
     request = new Request("https://api.github.com/repos/ESPresense/ESPresense/releases")
     request.headers.set("User-Agent", "espresense-release-proxy")
@@ -185,12 +217,13 @@ async function redirectToPrerelease(request) {
     let response = new Response(null, { status: 302 });
     response.headers.set("Location", asset.browser_download_url);
     response.headers.set("Cache-Control", "public, max-age=1500")
+
+    event.waitUntil(caches.default.put(cacheKey, response.clone()))
     return response
 }
 
 addEventListener("fetch", event => {
     const request = event.request
-    const url = new URL(request.url)
     const path = new URL(request.url).pathname
 
     if (path.startsWith(PROXY_ENDPOINT)) {
@@ -203,12 +236,12 @@ addEventListener("fetch", event => {
             request.method === "POST"
         ) {
             if (path.endsWith(".json"))
-                event.respondWith(manifestResponse(request))
+                event.respondWith(manifestResponse(request, event))
             else if (path.endsWith(".bin")) {
                 if (path.startsWith(DOWNLOAD_ENDPOINT))
-                    event.respondWith(redirectToPrerelease(request))
+                    event.respondWith(redirectToPrerelease(request, event))
                 else
-                    event.respondWith(fetchFromGithub(request))
+                    event.respondWith(fetchFromGithub(request, event))
             }
         } else {
             event.respondWith(
