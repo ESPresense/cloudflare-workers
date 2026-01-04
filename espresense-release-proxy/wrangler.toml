@@ -4,5 +4,3 @@ compatibility_date = "2022-02-23"
 
 account_id = "c72fc273edfb2236527b400b5463d663"
 workers_dev = true
-route = ""
-zone_id = ""
