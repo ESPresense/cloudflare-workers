@@ -161,7 +161,10 @@ releases.get('/latest-any/download/:filename',
       return c.json({ error: "No asset found" }, 404)
     }
 
-    return c.redirect(asset.browser_download_url)
+    // Manually set Cache-Control on redirect (cache middleware doesn't apply to redirects)
+    const redirectResponse = c.redirect(asset.browser_download_url)
+    redirectResponse.headers.set('Cache-Control', 'public, max-age=3600')
+    return redirectResponse
   }
 )
 
