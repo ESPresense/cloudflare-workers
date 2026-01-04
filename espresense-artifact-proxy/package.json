@@ -5,6 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "test": "jest --verbose",
+    "check": "wrangler deploy src/index.ts --dry-run",
     "dev": "wrangler dev src/index.ts",
     "deploy": "wrangler deploy src/index.ts"
   },

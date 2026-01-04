@@ -4,6 +4,12 @@
   "description": "ESPresense Cloudflare Workers",
   "scripts": {
     "test:deployment": "node test-deployment.js",
+    "test:artifact-proxy": "cd espresense-artifact-proxy && npm test",
+    "test:release-proxy": "cd espresense-release-proxy && npm test",
+    "test:all": "run-p test:artifact-proxy test:release-proxy",
+    "check:artifact-proxy": "cd espresense-artifact-proxy && npm run check",
+    "check:release-proxy": "cd espresense-release-proxy && npm run check",
+    "check:all": "npm run test:all && run-p check:artifact-proxy check:release-proxy",
     "deploy:artifact-proxy": "cd espresense-artifact-proxy && npm run deploy",
     "deploy:release-proxy": "cd espresense-release-proxy && npm run deploy",
     "deploy:all": "run-p deploy:artifact-proxy deploy:release-proxy",

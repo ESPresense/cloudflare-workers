@@ -22,8 +22,10 @@ cd espresense-artifact-proxy && npm install
 cd espresense-release-proxy && npm install
 
 # Run tests
-cd espresense-artifact-proxy && npm test
-cd espresense-release-proxy && npm test
+npm run test:all
+
+# Validate deployments (dry-run, no actual deployment)
+npm run check:all
 
 # Local development
 cd espresense-artifact-proxy && npm run dev
@@ -51,7 +53,14 @@ npm run test:deployment
 
 ### Automatic Deployment (GitHub Actions)
 
-The workers automatically deploy to production when pushing to the `master` branch.
+**Pull Requests:**
+- Runs tests and validates deployments (dry-run)
+- No actual deployment occurs
+- Ensures changes are deployable before merging
+
+**Master Branch:**
+- Automatically deploys to production on push
+- Runs tests, deploys, and validates
 
 **Setup:**
 
@@ -65,10 +74,9 @@ The workers automatically deploy to production when pushing to the `master` bran
 - Account → Workers Scripts → Edit
 - Zone → Workers Routes → Edit
 
-The workflow will:
-1. Run unit tests for both workers
-2. Deploy both workers to Cloudflare
-3. Run deployment tests against espresense.com
+**Workflows:**
+- `validate.yml` - Runs on PRs, validates without deploying
+- `deploy.yml` - Runs on master push, deploys to production
 
 ## Testing
 
