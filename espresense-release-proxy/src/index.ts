@@ -8,11 +8,11 @@ function esp32(path: string) {
     "chipFamily": "ESP32",
     "improv": false,
     "parts": [{
-      "path": "/static/bootloader_esp32.bin",
+      "path": "/static/esp32/bootloader.bin",
       "offset": 4096
     },
     {
-      "path": "/static/partitions.bin",
+      "path": "/static/esp32/partitions.bin",
       "offset": 32768
     },
     {
@@ -31,11 +31,11 @@ function esp32c3(path: string) {
     "chipFamily": "ESP32-C3",
     "improv": false,
     "parts": [{
-      "path": "/static/bootloader_esp32c3.bin",
+      "path": "/static/esp32c3/bootloader.bin",
       "offset": 0x0000
     },
     {
-      "path": "/static/partitions_esp32c3.bin",
+      "path": "/static/esp32c3/partitions.bin",
       "offset": 0x8000
     },
     {
