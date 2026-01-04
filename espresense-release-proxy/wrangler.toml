@@ -3,3 +3,10 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 account_id = "c72fc273edfb2236527b400b5463d663"
 workers_dev = true
+
+[observability]
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
