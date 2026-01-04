@@ -107,6 +107,52 @@ async function runTests() {
     'GET'
   ));
 
+  // Manifest Validation Tests
+  console.log('Manifest Validation Tests (verify all manifest URLs are valid)');
+  console.log('-'.repeat(60));
+
+  // Test latest release manifest
+  try {
+    const manifestUrl = `${BASE_URL}/releases/latest.json`;
+    const manifestResponse = await fetch(manifestUrl);
+
+    if (manifestResponse.ok) {
+      const manifest = await manifestResponse.json();
+      console.log(`Fetched manifest: ${manifest.name}`);
+      console.log(`  Builds: ${manifest.builds.length}`);
+
+      // Test each build in the manifest
+      for (const build of manifest.builds) {
+        console.log(`  Testing ${build.chipFamily} build with ${build.parts.length} parts...`);
+
+        // Test each part (bootloader, partition, firmware, etc.)
+        for (const part of build.parts) {
+          const partUrl = `${BASE_URL}${part.path}`;
+          const partResponse = await fetch(partUrl, { method: 'HEAD' });
+          const passed = partResponse.ok;
+
+          results.push(passed);
+
+          if (!passed) {
+            console.log(`    ✗ ${part.path} - ${partResponse.status}`);
+            console.log(`      URL: ${partUrl}`);
+            console.log(`      FAILED: File referenced in manifest returns ${partResponse.status}`);
+          } else {
+            console.log(`    ✓ ${part.path} - ${partResponse.status}`);
+          }
+        }
+      }
+    } else {
+      console.log(`✗ Failed to fetch manifest: ${manifestResponse.status}`);
+      results.push(false);
+    }
+  } catch (error) {
+    console.log(`✗ Manifest validation error: ${error.message}`);
+    results.push(false);
+  }
+
+  console.log('');
+
   // Summary
   console.log('='.repeat(60));
   const passed = results.filter(r => r).length;

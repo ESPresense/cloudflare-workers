@@ -119,6 +119,15 @@ Both workers generate JSON manifests for the ESP Web Tools installer. The manife
 - Support for flavor variants (e.g., `?flavor=ble`) to select different firmware builds
 - Asset lookup with fallback logic: tries flavor-specific files first, then defaults
 
+**Static File Paths:** The bootloader and partition files are served from the ESPresense.github.io repository's `/static/` directory:
+- ESP32 bootloader: `/static/esp32/bootloader.bin`
+- ESP32 partitions: `/static/esp32/partitions.bin`
+- ESP32-C3 bootloader: `/static/esp32c3/bootloader.bin`
+- ESP32-C3 partitions: `/static/esp32c3/partitions.bin`
+- Boot app selector (shared): `/static/boot_app0.bin`
+
+These files are maintained in the ESPresense.github.io repository and are chip-specific but firmware-version independent.
+
 ### Deployment
 
 The main branch is `main` (not master, despite validate.yml checking PRs against master).
