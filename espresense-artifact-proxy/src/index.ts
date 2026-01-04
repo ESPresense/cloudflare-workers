@@ -4,7 +4,6 @@ import { prettyJSON } from 'hono/pretty-json'
 import { cache } from 'hono/cache'
 import { cors } from 'hono/cors'
 
-import { Octokit } from "@octokit/core"
 import * as fflate from "fflate";
 
 function esp32(path: string) {
@@ -65,27 +64,34 @@ function findAsset(rel: Artifact[], name: string): Artifact | null {
 const app = new Hono()
 app.use("*", cors())
 app.get('/', (c: Context) => c.text('OK'))
-const octokit = new Octokit({})
 
 const artifacts = new Hono()
 artifacts.use('*', prettyJSON())
 
-// Latest builds change frequently, cache for 1 hour minimum
+// Latest builds change frequently, cache GitHub API responses for 5 minutes
 artifacts.all('/latest/download/:branch/:bin',
-  cache({ cacheName: 'artifacts', cacheControl: 'public, max-age=3600' }),
+  cache({ cacheName: 'artifacts', cacheControl: 'public, max-age=300' }),
   async (c: Context) => {
     const branch = c.req.param('branch');
     const bin = c.req.param('bin');
     console.log({ branch, bin })
 
-    var resp = await octokit.request('GET /repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs', {
-      owner: 'ESPresense',
-      repo: 'ESPresense',
-      workflow_id: 'build.yml',
-      status: 'success',
-      branch: branch
-    })
-    const firstRun = resp.data.workflow_runs[0]
+    const response = await fetch(
+      `https://api.github.com/repos/ESPresense/ESPresense/actions/workflows/build.yml/runs?status=success&branch=${branch}`,
+      {
+        headers: { "User-Agent": "espresense-artifact-proxy" },
+        cf: {
+          cacheTtlByStatus: { '200-299': 300, '404': 1, '500-599': 0 }
+        }
+      } as any
+    )
+
+    if (!response.ok) {
+      return c.json({ error: "Failed to fetch workflow runs" }, response.status as any)
+    }
+
+    const data: any = await response.json()
+    const firstRun = data.workflow_runs[0]
     if (!firstRun) return c.notFound()
     const run_id = firstRun.id
     const sha = firstRun.head_sha
@@ -93,19 +99,30 @@ artifacts.all('/latest/download/:branch/:bin',
   }
 )
 
-// Specific run artifacts are immutable, cache for 24 hours
+// Specific run artifacts are immutable, cache GitHub API responses for 24 hours
 artifacts.all('/download/runs/:run_id/:sha/:bin',
   cache({ cacheName: 'artifacts', cacheControl: 'public, max-age=86400' }),
   async (c: Context) => {
     const run_id = parseInt(c.req.param('run_id'))
     const bin = c.req.param('bin')
     console.log({ run_id })
-    var resp = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts', {
-      owner: 'ESPresense',
-      repo: 'ESPresense',
-      run_id: run_id
-    })
-    let artifacts = resp.data.artifacts;
+
+    const response = await fetch(
+      `https://api.github.com/repos/ESPresense/ESPresense/actions/runs/${run_id}/artifacts`,
+      {
+        headers: { "User-Agent": "espresense-artifact-proxy" },
+        cf: {
+          cacheTtlByStatus: { '200-299': 86400, '404': 1, '500-599': 0 }
+        }
+      } as any
+    )
+
+    if (!response.ok) {
+      return c.json({ error: "Failed to fetch artifacts" }, response.status as any)
+    }
+
+    const data: any = await response.json()
+    let artifacts = data.artifacts;
     const artifact = findAsset(artifacts, bin)
     if (!artifact) return c.notFound()
     return c.redirect(`/artifacts/download/${artifact.id}/${bin}`)
@@ -135,7 +152,7 @@ artifacts.get('/download/:artifact_id/*',
   }
 );
 
-// Manifests for specific runs are immutable, cache for 24 hours
+// Manifests for specific runs are immutable, cache GitHub API responses for 24 hours
 artifacts.get('/:run_id_2{[0-9]+.json}',
   cache({ cacheName: 'artifacts', cacheControl: 'public, max-age=86400' }),
   async (c: Context) => {
@@ -143,13 +160,22 @@ artifacts.get('/:run_id_2{[0-9]+.json}',
     const run_id = parseInt(c.req.param('run_id_2'));
     console.log({ flavor, run_id })
 
-    const resp = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts', {
-      owner: 'ESPresense',
-      repo: 'ESPresense',
-      run_id: run_id
-    })
+    const response = await fetch(
+      `https://api.github.com/repos/ESPresense/ESPresense/actions/runs/${run_id}/artifacts`,
+      {
+        headers: { "User-Agent": "espresense-artifact-proxy" },
+        cf: {
+          cacheTtlByStatus: { '200-299': 86400, '404': 1, '500-599': 0 }
+        }
+      } as any
+    )
 
-    const runArtifacts = resp.data.artifacts;
+    if (!response.ok) {
+      return c.json({ error: "Failed to fetch artifacts" }, response.status as any)
+    }
+
+    const data: any = await response.json()
+    const runArtifacts = data.artifacts;
     if (runArtifacts.length === 0) return c.notFound()
     const workflow_run = runArtifacts[0].workflow_run;
     if (!workflow_run) return c.json({ error: "No workflow run found" }, 404)
