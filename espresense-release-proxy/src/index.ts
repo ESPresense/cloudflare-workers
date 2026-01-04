@@ -1,7 +1,6 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { prettyJSON } from 'hono/pretty-json'
-import { cache } from 'hono/cache'
 import { cors } from 'hono/cors'
 
 function esp32(path: string) {
@@ -71,13 +70,15 @@ app.get('/', (c: Context) => c.text('OK'))
 const releases = new Hono()
 releases.use('*', prettyJSON())
 
-// Specific release manifests are immutable, cache for 24 hours
+// Release manifests: latest = 5 min, specific releases = 1 day
 releases.get('/:tag{[^/]+\\.json}',
-  cache({ cacheName: 'releases', cacheControl: 'public, max-age=86400' }),
   async (c: Context) => {
     const fname = c.req.param('tag')
     const tag = fname.substring(0, fname.lastIndexOf('.'))
     const flavor = c.req.query('flavor')
+
+    // latest changes frequently, specific releases are immutable
+    const maxAge = tag === 'latest' ? 300 : 86400
 
     const response = await fetch(`https://api.github.com/repos/ESPresense/ESPresense/releases/tags/${tag}`, {
       headers: { "User-Agent": "espresense-release-proxy" },
@@ -104,16 +105,19 @@ releases.get('/:tag{[^/]+\\.json}',
     const c3 = findAsset(rel, `esp32c3-${flavor}.bin`) || findAsset(rel, `esp32c3.bin`)
     if (c3) manifest.builds.push(esp32c3(`download/${tag}/${c3.name}`))
 
+    c.header('Cache-Control', `public, max-age=${maxAge}`)
     return c.json(manifest)
   }
 )
 
-// Specific release downloads are immutable, cache for 24 hours
+// Release downloads: latest = 5 min, specific releases = 1 day
 releases.get('/download/:tag/:filename',
-  cache({ cacheName: 'releases', cacheControl: 'public, max-age=86400' }),
   async (c: Context) => {
     const tag = c.req.param('tag')
     const filename = c.req.param('filename')
+
+    // latest changes frequently, specific releases are immutable
+    const maxAge = tag === 'latest' ? 300 : 86400
 
     const githubUrl = `https://github.com/ESPresense/ESPresense/releases/download/${tag}/${filename}`
     const response = await fetch(githubUrl, {
@@ -126,15 +130,15 @@ releases.get('/download/:tag/:filename',
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'application/octet-stream',
-        'Access-Control-Allow-Origin': '*'
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': `public, max-age=${maxAge}`
       }
     })
   }
 )
 
-// Latest prerelease changes, cache for 1 hour
+// Latest prerelease changes, cache for 5 minutes
 releases.get('/latest-any/download/:filename',
-  cache({ cacheName: 'releases', cacheControl: 'public, max-age=3600' }),
   async (c: Context) => {
     const filename = c.req.param('filename')
 
@@ -161,9 +165,8 @@ releases.get('/latest-any/download/:filename',
       return c.json({ error: "No asset found" }, 404)
     }
 
-    // Manually set Cache-Control on redirect (cache middleware doesn't apply to redirects)
     const redirectResponse = c.redirect(asset.browser_download_url)
-    redirectResponse.headers.set('Cache-Control', 'public, max-age=3600')
+    redirectResponse.headers.set('Cache-Control', 'public, max-age=300')
     return redirectResponse
   }
 )
