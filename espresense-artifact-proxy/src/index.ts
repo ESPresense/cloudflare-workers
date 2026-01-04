@@ -81,12 +81,15 @@ artifacts.all('/latest/download/:branch/:bin',
       {
         headers: { "User-Agent": "espresense-artifact-proxy" },
         cf: {
-          cacheTtlByStatus: { '200-299': 300, '404': 1, '500-599': 0 }
+          cacheTtlByStatus: { '200-299': 300, '400-499': 60, '500-599': 0 }
         }
       } as any
     )
 
     if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error(`GitHub API returned 403 when fetching workflow runs for ${branch}`)
+      }
       return c.json({ error: "Failed to fetch workflow runs" }, response.status as any)
     }
 
@@ -112,12 +115,15 @@ artifacts.all('/download/runs/:run_id/:sha/:bin',
       {
         headers: { "User-Agent": "espresense-artifact-proxy" },
         cf: {
-          cacheTtlByStatus: { '200-299': 86400, '404': 1, '500-599': 0 }
+          cacheTtlByStatus: { '200-299': 86400, '400-499': 60, '500-599': 0 }
         }
       } as any
     )
 
     if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error(`GitHub API returned 403 when fetching artifacts for run ${run_id}`)
+      }
       return c.json({ error: "Failed to fetch artifacts" }, response.status as any)
     }
 
@@ -165,12 +171,15 @@ artifacts.get('/:run_id_2{[0-9]+.json}',
       {
         headers: { "User-Agent": "espresense-artifact-proxy" },
         cf: {
-          cacheTtlByStatus: { '200-299': 86400, '404': 1, '500-599': 0 }
+          cacheTtlByStatus: { '200-299': 86400, '400-499': 60, '500-599': 0 }
         }
       } as any
     )
 
     if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error(`GitHub API returned 403 when fetching artifacts for manifest ${run_id}`)
+      }
       return c.json({ error: "Failed to fetch artifacts" }, response.status as any)
     }
 

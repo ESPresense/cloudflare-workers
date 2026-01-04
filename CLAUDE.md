@@ -73,6 +73,8 @@ All GitHub API requests are cached using Cloudflare's edge cache (`cf.cacheTtlBy
 - Specific run artifacts (GitHub API): 24 hours (immutable once created)
 - Specific run artifacts (client response): 24 hours
 - Artifact downloads by ID: 7 days (fully immutable)
+- 400-499 errors (including 403 rate limits): 60 seconds
+- 500-599 errors: No caching (0 seconds)
 
 ### Release Proxy (`espresense-release-proxy`)
 
@@ -82,9 +84,33 @@ The release proxy serves GitHub release assets with caching:
 2. **Downloads** (`/releases/download/:tag/:filename`) - Proxies release asset downloads
 3. **Latest prerelease** (`/releases/latest-any/download/:filename`) - Finds the latest release (including prereleases) with assets
 
+**CRITICAL: Redirect Requirement**
+
+The `/releases/latest-any/download/:filename` endpoint **MUST return a 3xx redirect**, not proxy the download.
+
+The ESP32 firmware's update detection mechanism (`Updater::checkForUpdates()`) works as follows:
+1. Sends a HEAD request to the firmware URL
+2. Expects a 3xx redirect response (not 200)
+3. Extracts the `Location` header from the redirect
+4. Compares the Location URL against a version marker (e.g., `/v1.2.3/`)
+5. If the version marker is missing or different, saves the redirect URL and restarts to apply the update
+
+If this endpoint proxies instead of redirects, it returns 200 with binary data, and the firmware's `isRedirect` check fails, preventing automatic updates from working.
+
 **Caching Strategy:**
 - Latest release: 5 minutes (changes frequently)
 - Specific releases: 24 hours (immutable)
+- 400-499 errors (including 403 rate limits): 60 seconds
+- 500-599 errors: No caching (0 seconds)
+
+### Error Handling and Observability
+
+Both workers throw errors on GitHub API 403 responses (rate limiting) so they appear in Cloudflare's error metrics:
+- **403 responses**: Throw `Error` with descriptive message - shows up as worker execution failure in observability
+- **404 responses**: Return JSON error with 404 status - legitimate "not found", not an execution error
+- **Other 4xx/5xx**: Return JSON error with original status code - pass through to client
+
+This distinction is important because Cloudflare Workers observability tracks "errors" as execution failures (uncaught exceptions), not HTTP status codes. By throwing on 403, we can track and alert on rate limiting issues.
 
 ### Shared Manifest Logic
 

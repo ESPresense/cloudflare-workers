@@ -83,11 +83,14 @@ releases.get('/:tag{[^/]+\\.json}',
     const response = await fetch(`https://api.github.com/repos/ESPresense/ESPresense/releases/tags/${tag}`, {
       headers: { "User-Agent": "espresense-release-proxy" },
       cf: {
-        cacheTtlByStatus: { '200-299': 300, '404': 1, '500-599': 0 }
+        cacheTtlByStatus: { '200-299': 300, '400-499': 60, '500-599': 0 }
       }
     } as any)
 
     if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error(`GitHub API returned 403 when fetching release ${tag}`)
+      }
       return c.json({ error: "Release not found" }, response.status as any)
     }
 
@@ -122,7 +125,7 @@ releases.get('/download/:tag/:filename',
     const githubUrl = `https://github.com/ESPresense/ESPresense/releases/download/${tag}/${filename}`
     const response = await fetch(githubUrl, {
       cf: {
-        cacheTtlByStatus: { '200-299': 300, '404': 1, '500-599': 0 }
+        cacheTtlByStatus: { '200-299': 300, '400-499': 60, '500-599': 0 }
       }
     } as any)
 
@@ -145,11 +148,14 @@ releases.get('/latest-any/download/:filename',
     const response = await fetch("https://api.github.com/repos/ESPresense/ESPresense/releases", {
       headers: { "User-Agent": "espresense-release-proxy" },
       cf: {
-        cacheTtlByStatus: { '200-299': 300, '404': 1, '500-599': 0 }
+        cacheTtlByStatus: { '200-299': 300, '400-499': 60, '500-599': 0 }
       }
     } as any)
 
     if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error(`GitHub API returned 403 when fetching releases`)
+      }
       return c.json({ error: "No releases found" }, response.status as any)
     }
 
@@ -165,6 +171,10 @@ releases.get('/latest-any/download/:filename',
       return c.json({ error: "No asset found" }, 404)
     }
 
+    // IMPORTANT: Must redirect, not proxy!
+    // ESP32 firmware checks for updates by sending HEAD requests and expects a 3xx redirect.
+    // It compares the Location header against a version marker to detect new versions.
+    // See Updater::checkForUpdates() in the ESPresense firmware.
     const redirectResponse = c.redirect(asset.browser_download_url)
     redirectResponse.headers.set('Cache-Control', 'public, max-age=300')
     return redirectResponse
